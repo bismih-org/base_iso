@@ -1,0 +1,3 @@
+[submodule "kde-config"]
+	path = kde-config
+	url = https://github.com/bismih-org/kde-config
