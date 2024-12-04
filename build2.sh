@@ -3,7 +3,7 @@
 # Set variables
 CHROOT_DIR="kaynak"
 ISO_WORK_DIR="isowork"
-ISO_OUTPUT="bismih-0-17-amd64.iso"
+ISO_OUTPUT="bismih-1-amd64.iso"
 
 p_system() {
     chroot "${CHROOT_DIR}" "$@"
@@ -125,7 +125,7 @@ install_desktop_environment() {
     de=$1
     if [ "$de" == "kde" ]; then
         p_system_n_a apt install libappstreamqt2 appstream packagekit kde-standard -y
-        p_system_n_a apt purge juk kmail* konqueror kwrite kde-spectacle zutty -y
+        p_system_n_a apt purge dragonplayer juk kmail* konqueror kwrite kde-spectacle zutty -y
         add_close_service
     elif [ "$de" == "gnome" ]; then
         p_system_n_a apt install gnome -y
@@ -169,6 +169,10 @@ EOF
     p_system systemctl start kill_kwin.service
 }
 
+bip_sound_problem() {
+    echo "blacklist pcspkr" | tee "$CHROOT_DIR/etc/modprobe.d/nobeep.conf"
+}
+
 intall_pardus_packages() {
     echo "pardus paketleri yükleniyor..."
     p_system_n_a apt install pardus-about pardus-ayyildiz-grub-theme \
@@ -183,8 +187,8 @@ install_other_packages() {
         printer-driver-all system-config-printer simple-scan blueman speech-dispatcher espeak\
         git system-monitoring-center bash-completion libreoffice libreoffice-kf5 \
         libreoffice-l10n-tr libreoffice-style-yaru birdtray thunderbird thunderbird-l10n-tr \
-        touchegg flameshot elisa xsel xdotool unrar webapp-manager appimagelauncher pkg-config zen-browser \
-        nala easyeffects zsh aria2 zoxide -y  
+        touchegg flameshot xsel xdotool unrar webapp-manager appimagelauncher pkg-config zen-browser \
+        nala easyeffects vlc audacious zsh aria2 zoxide -y
 }
 
 install_flatpack_and_packages() {
@@ -255,6 +259,7 @@ main() {
     install_firmware
     install_pipewire
     install_desktop_environment "kde"
+    bip_sound_problem
     intall_pardus_packages
     install_other_packages
     install_flatpack_and_packages
