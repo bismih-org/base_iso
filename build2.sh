@@ -3,7 +3,7 @@
 # Set variables
 CHROOT_DIR="kaynak"
 ISO_WORK_DIR="isowork"
-ISO_OUTPUT="bismih-0-5-amd64.iso"
+ISO_OUTPUT="bismih-0-17-amd64.iso"
 
 p_system() {
     chroot "${CHROOT_DIR}" "$@"
@@ -174,7 +174,7 @@ intall_pardus_packages() {
     p_system_n_a apt install pardus-about pardus-ayyildiz-grub-theme \
         pardus-backgrounds pardus-font-manager pardus-image-writer pardus-installer pardus-java-installer pardus-locales \
         pardus-menus pardus-mycomputer pardus-night-light pardus-package-installer pardus-software pardus-update \
-        pardus-usb-formatter pardus-wallpaper-23-0 -y
+        pardus-usb-formatter -y
 }
 
 install_other_packages() {
@@ -200,13 +200,13 @@ config_shell() {
 
 set_configs(){
     #ek uygulamalar
-    stt="kaynak/etc/skel/Applications/sellected_text_translation"
+    stt="kaynak/etc/skel/Applications"
     mkdir -p "$stt"
-    git clone https://github.com/halak0013/sellected_text_translation.git $stt
+    git clone https://github.com/halak0013/sellected_text_translation.git "$stt/sellected_text_translation"
     rm -rf "$stt/.git"
     wget -c https://github.com/dynobo/normcap/releases/download/v0.5.9/NormCap-0.5.9-x86_64.AppImage -O "$stt/NormCap.AppImage"
 
-    cp -a kde-config/. kaynak/etc/skel/
+    p_system_n_a apt install bismih-theme kde-bismih-config -y
     config_shell
 
 }
@@ -266,7 +266,7 @@ main() {
 custom(){
     enter_system
 
-    update_system
+    #update_system
 
     generate_iso
 }

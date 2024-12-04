@@ -2,4 +2,3 @@
 
 Yapılacaklar
 - duvar kağıdı
-- libreoffice
