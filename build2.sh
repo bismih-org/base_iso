@@ -188,13 +188,14 @@ install_other_packages() {
         git system-monitoring-center bash-completion libreoffice libreoffice-kf5 \
         libreoffice-l10n-tr libreoffice-style-yaru birdtray thunderbird thunderbird-l10n-tr \
         touchegg flameshot xsel xdotool unrar webapp-manager appimagelauncher pkg-config zen-browser \
-        nala easyeffects vlc audacious zsh aria2 zoxide -y
+        nala vlc audacious zsh aria2 zoxide -y
 }
 
 install_flatpack_and_packages() {
     echo "flatpack ve paketleri yükleniyor..."
     p_system_n_a apt install flatpak plasma-discover-backend-flatpak -y
     p_system flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    p_system flatpak install flathub com.github.wwmm.easyeffects -y
 }
 
 config_shell() {
