@@ -3,7 +3,8 @@
 # Set variables
 CHROOT_DIR="kaynak"
 ISO_WORK_DIR="isowork"
-ISO_OUTPUT="bismih-1-amd64.iso"
+VERSION="0.42"
+ISO_OUTPUT="bismih-$VERSION-amd64.iso"
 
 p_system() {
     chroot "${CHROOT_DIR}" "$@"
@@ -176,19 +177,24 @@ bip_sound_problem() {
 intall_pardus_packages() {
     echo "pardus paketleri yükleniyor..."
     p_system_n_a apt install pardus-about pardus-ayyildiz-grub-theme \
-        pardus-backgrounds pardus-font-manager pardus-image-writer pardus-installer pardus-java-installer pardus-locales \
-        pardus-menus pardus-mycomputer pardus-night-light pardus-package-installer pardus-software pardus-update \
-        pardus-usb-formatter -y
+        pardus-backgrounds pardus-boot-repair pardus-font-manager pardus-image-writer pardus-installer pardus-java-installer \
+        pardus-locales  pardus-menus pardus-mycomputer pardus-night-light pardus-package-installer pardus-software \
+        pardus-update pardus-usb-formatter -y
 }
 
 install_other_packages() {
     echo "diğer paketler yükleniyor..."
     p_system_n_a apt install \
-        printer-driver-all system-config-printer simple-scan blueman speech-dispatcher espeak\
-        git system-monitoring-center bash-completion libreoffice libreoffice-kf5 \
-        libreoffice-l10n-tr libreoffice-style-yaru birdtray thunderbird thunderbird-l10n-tr \
+        printer-driver-all system-config-printer simple-scan blueman speech-dispatcher libatspi2.0-0 espeak \
+        git system-monitoring-center bash-completion birdtray thunderbird thunderbird-l10n-tr \
         touchegg flameshot xsel xdotool unrar webapp-manager appimagelauncher pkg-config zen-browser \
-        nala vlc audacious zsh aria2 zoxide -y
+        nala vlc audacious zsh aria2 zoxide onlyoffice-desktopeditors scrcpy lsb-release ark \
+        bleachbit htop timeshift -y
+}
+
+install_libreoffice() {
+    echo "libreoffice yükleniyor..."
+    p_system_n_a apt install libreoffice libreoffice-kf5 libreoffice-l10n-tr libreoffice-style-yaru -y
 }
 
 install_flatpack_and_packages() {
@@ -200,20 +206,43 @@ install_flatpack_and_packages() {
 
 config_shell() {
     chsh -s $(which zsh)
-    sed -i 's|^SHELL=.*|SHELL=/usr/bin/zsh|' kaynak/etc/default/useradd
+    sed -i 's|^SHELL=.*|SHELL=/usr/bin/zsh|' $CHROOT_DIR/etc/default/useradd
 }
 
-set_configs(){
-    #ek uygulamalar
-    stt="kaynak/etc/skel/Applications"
+add_localpackage() {
+    echo "local paket ekleniyor..."
+
+    stt="$CHROOT_DIR/etc/skel/Applications"
     mkdir -p "$stt"
     git clone https://github.com/halak0013/sellected_text_translation.git "$stt/sellected_text_translation"
     rm -rf "$stt/.git"
     wget -c https://github.com/dynobo/normcap/releases/download/v0.5.9/NormCap-0.5.9-x86_64.AppImage -O "$stt/NormCap.AppImage"
+}
 
+set_configs(){
+    echo "ayarlar yapılıyor..."
+    add_localpackage
     p_system_n_a apt install bismih-theme kde-bismih-config -y
     config_shell
+}
 
+fix_bluetooth() {
+    echo "Bluetooth askıya alma sorunu düzeltiliyor..."
+    
+    # GRUB yapılandırma dosyasını düzenle
+    if grep -q "usbcore.autosuspend=-1" "${CHROOT_DIR}/etc/default/grub"; then
+        echo "USB askıya alma zaten devre dışı bırakılmış."
+    else
+        # Mevcut GRUB_CMDLINE_LINUX_DEFAULT değerini al
+        local grub_cmdline=$(grep "GRUB_CMDLINE_LINUX_DEFAULT=" "${CHROOT_DIR}/etc/default/grub" | cut -d '"' -f2)
+        
+        # Parametreyi ekle
+        local new_grub_cmdline="$grub_cmdline usbcore.autosuspend=-1"
+        
+        # Dosyayı güncelle
+        sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"$grub_cmdline\"/GRUB_CMDLINE_LINUX_DEFAULT=\"$new_grub_cmdline\"/" "${CHROOT_DIR}/etc/default/grub"
+    fi
+    echo "Bluetooth askıya alma sorunu düzeltildi."
 }
 
 clean_system() {
@@ -246,7 +275,7 @@ generate_iso() {
     mkdir -p "${ISO_WORK_DIR}/boot"
     cp -r grub/ "${ISO_WORK_DIR}/boot/"
 
-    grub-mkrescue "${ISO_WORK_DIR}" -o "${ISO_OUTPUT}"
+    grub-mkrescue --iso-level 3 "${ISO_WORK_DIR}" -o "${ISO_OUTPUT}"
 
 }
 
@@ -270,10 +299,23 @@ main() {
 }
 
 custom(){
-    enter_system
-
-    #update_system
-
+    setup_chroot
+    add_repositories
+    update_system
+    install_kernel "backports"
+    set_system_locale
+    install_grub
+    install_firmware
+    install_pipewire
+    install_desktop_environment "kde"
+    bip_sound_problem
+    intall_pardus_packages
+    install_other_packages
+    install_flatpack_and_packages
+    config_shell
+    add_localpackage
+    fix_bluetooth
+    clean_system
     generate_iso
 }
 
