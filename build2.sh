@@ -3,7 +3,7 @@
 # Set variables
 CHROOT_DIR="kaynak"
 ISO_WORK_DIR="isowork"
-VERSION="0.42"
+VERSION="0.53"
 ISO_OUTPUT="bismih-$VERSION-amd64.iso"
 
 p_system() {
@@ -176,7 +176,7 @@ bip_sound_problem() {
 
 intall_pardus_packages() {
     echo "pardus paketleri yükleniyor..."
-    p_system_n_a apt install pardus-about pardus-ayyildiz-grub-theme \
+    p_system_n_a apt install pardus-about \
         pardus-backgrounds pardus-boot-repair pardus-font-manager pardus-image-writer pardus-installer pardus-java-installer \
         pardus-locales  pardus-menus pardus-mycomputer pardus-night-light pardus-package-installer pardus-software \
         pardus-update pardus-usb-formatter -y
@@ -207,6 +207,7 @@ install_flatpack_and_packages() {
 config_shell() {
     chsh -s $(which zsh)
     sed -i 's|^SHELL=.*|SHELL=/usr/bin/zsh|' $CHROOT_DIR/etc/default/useradd
+    cp .bashrc $CHROOT_DIR/etc/skel/.bashrc
 }
 
 add_localpackage() {
@@ -222,7 +223,8 @@ add_localpackage() {
 set_configs(){
     echo "ayarlar yapılıyor..."
     add_localpackage
-    p_system_n_a apt install bismih-theme kde-bismih-config -y
+    p_system_n_a apt install kde-bismih-config -y
+    p_system_n_a apt install bismih-theme bismih-gun-batimi-grub-theme -y
     config_shell
 }
 
@@ -273,6 +275,7 @@ generate_iso() {
     cp -pf "${CHROOT_DIR}/boot/vmlinuz"* "${ISO_WORK_DIR}/live/vmlinuz"
 
     mkdir -p "${ISO_WORK_DIR}/boot"
+    git clone https://github.com/bismih-org/grub.git
     cp -r grub/ "${ISO_WORK_DIR}/boot/"
 
     grub-mkrescue --iso-level 3 "${ISO_WORK_DIR}" -o "${ISO_OUTPUT}"
@@ -294,6 +297,7 @@ main() {
     install_other_packages
     install_flatpack_and_packages
     set_configs
+    fix_bluetooth
     clean_system
     generate_iso
 }
