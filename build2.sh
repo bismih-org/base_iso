@@ -3,7 +3,7 @@
 # Set variables
 CHROOT_DIR="kaynak"
 ISO_WORK_DIR="isowork"
-VERSION="0.53"
+VERSION="66"
 ISO_OUTPUT="bismih-$VERSION-amd64.iso"
 
 p_system() {
@@ -72,18 +72,22 @@ install_kernel() {
     echo "çekirdek yükleniyor..."
     kernel_stablity=$1
     if [ "$kernel_stablity" == "stable" ]; then
-        p_system_n_a apt install linux-image-amd64 -y
+        p_system_n_a apt install linux-image-amd64 linux-headers-amd64 -y
     elif [ "$kernel_stablity" == "backports" ]; then
-        p_system_n_a apt install -t yirmiuc-backports linux-image-amd64 -y
+        p_system_n_a apt install -t yirmiuc-backports linux-image-amd64 linux-headers-amd64 -y
     elif [ "$kernel_stablity" == "rolling" ]; then
         wget --quiet -O - https://liquorix.net/liquorix-keyring.gpg | tee "${CHROOT_DIR}/etc/apt/keyrings/liquorix-keyring.gpg"
         echo "deb [signed-by=/etc/apt/keyrings/liquorix-keyring.gpg arch=$(dpkg --print-architecture)] https://liquorix.net/debian bookworm main" >>"${CHROOT_DIR}/etc/apt/sources.list.d/liquorix.list"
         p_system apt update -y
-        p_system apt install linux-image-liquorix-amd64 linux-headers-liquorix-amd64
+        p_system apt install linux-image-liquorix-amd64 linux-headers-liquorix-amd64 -y
     else
         echo "Invalid kernel stability! Usage: install_kernel {stable|backports|rolling}"
+        return 1
     fi
-    p_system_n_a apt install -t yirmiuc-backports linux-image-amd64 -y
+    
+    # initramfs'i güncelle
+    p_system update-initramfs -u -k all
+    echo "Kernel ve initramfs başarıyla yüklendi"
 }
 
 set_system_locale() {
@@ -189,7 +193,7 @@ install_other_packages() {
         git system-monitoring-center bash-completion birdtray thunderbird thunderbird-l10n-tr \
         touchegg flameshot xsel xdotool unrar webapp-manager appimagelauncher pkg-config zen-browser \
         nala vlc audacious zsh aria2 zoxide onlyoffice-desktopeditors scrcpy lsb-release ark \
-        bleachbit htop timeshift -y
+        bleachbit htop timeshift python3-pip -y
 }
 
 install_libreoffice() {
@@ -223,7 +227,9 @@ add_localpackage() {
 set_configs(){
     echo "ayarlar yapılıyor..."
     add_localpackage
-    p_system_n_a apt install kde-bismih-config -y
+    # p_system_n_a apt install kde-bismih-config -y
+    p_system_n_a pip install PyAutoGUI --break-system
+    p_system_n_a apt install bismih-welcome quick-shortcut-panel -y
     p_system_n_a apt install bismih-theme bismih-gun-batimi-grub-theme -y
     config_shell
 }
@@ -261,27 +267,56 @@ clean_system() {
 
 generate_iso() {
     echo "iso oluşturuluyor..."
-    umount -lf -R "${CHROOT_DIR}"/* 2>/dev/null
+    
+    # Chroot mount'ları temizle
+    for i in sys proc dev/pts dev; do
+        umount -lf "${CHROOT_DIR}/$i" 2>/dev/null || true
+    done
 
     rm -rf "${ISO_WORK_DIR}"
-    mkdir -p "${ISO_WORK_DIR}"
-    mksquashfs "${CHROOT_DIR}" filesystem.squashfs -comp gzip -wildcards
-    #mksquashfs "${CHROOT_DIR}" "${ISO_WORK_DIR}/live/filesystem.squashfs" -comp xz -wildcards
+    rm -f filesystem.squashfs
+
+    # Kernel dosyalarını kontrol et
+    echo "Mevcut kernel dosyaları:"
+    ls -la "${CHROOT_DIR}/boot/"
+    
+    # En yeni kernel dosyalarını bul
+    NEWEST_VMLINUZ=$(find "${CHROOT_DIR}/boot/" -name "vmlinuz-*" -type f | sort -V | tail -n 1)
+    NEWEST_INITRD=$(find "${CHROOT_DIR}/boot/" -name "initrd.img-*" -type f | sort -V | tail -n 1)
+    
+    echo "Seçilen vmlinuz: $NEWEST_VMLINUZ"
+    echo "Seçilen initrd: $NEWEST_INITRD"
+    
+    if [ ! -f "$NEWEST_VMLINUZ" ] || [ ! -f "$NEWEST_INITRD" ]; then
+        echo "HATA: Kernel dosyaları bulunamadı!"
+        return 1
+    fi
 
     mkdir -p "${ISO_WORK_DIR}/live"
-    mv filesystem.squashfs "${ISO_WORK_DIR}/live/filesystem.squashfs"
-
-    cp -pf "${CHROOT_DIR}/boot/initrd.img"* "${ISO_WORK_DIR}/live/initrd.img"
-    cp -pf "${CHROOT_DIR}/boot/vmlinuz"* "${ISO_WORK_DIR}/live/vmlinuz"
-
     mkdir -p "${ISO_WORK_DIR}/boot"
-    git clone https://github.com/bismih-org/grub.git
+
+    # Squashfs oluştur
+    mksquashfs "${CHROOT_DIR}" "${ISO_WORK_DIR}/live/filesystem.squashfs" -comp gzip -wildcards
+    # mksquashfs "${CHROOT_DIR}" "${ISO_WORK_DIR}/live/filesystem.squashfs" -comp xz -wildcards
+
+    # Kernel dosyalarını kopyala
+    cp -pf "$NEWEST_VMLINUZ" "${ISO_WORK_DIR}/live/vmlinuz"
+    cp -pf "$NEWEST_INITRD" "${ISO_WORK_DIR}/live/initrd.img"
+    
+    echo "Vmlinuz kopyalandı: $(basename $NEWEST_VMLINUZ)"
+    echo "Initrd kopyalandı: $(basename $NEWEST_INITRD)"
+
+    # GRUB yapılandırması
+    if [ ! -d "grub" ]; then
+        git clone https://github.com/bismih-org/grub.git
+    fi
     cp -r grub/ "${ISO_WORK_DIR}/boot/"
 
+    # ISO oluştur
     grub-mkrescue --iso-level 3 "${ISO_WORK_DIR}" -o "${ISO_OUTPUT}"
-
+    
+    echo "ISO başarıyla oluşturuldu: ${ISO_OUTPUT}"
 }
-
 main() {
     setup_chroot
     add_repositories
@@ -306,7 +341,7 @@ custom(){
     setup_chroot
     add_repositories
     update_system
-    install_kernel "backports"
+    install_kernel "stable"
     set_system_locale
     install_grub
     install_firmware
@@ -316,12 +351,12 @@ custom(){
     intall_pardus_packages
     install_other_packages
     install_flatpack_and_packages
-    config_shell
-    add_localpackage
+    set_configs
     fix_bluetooth
     clean_system
-    generate_iso
+    # generate_iso
 }
 
-main
-#custom
+# main
+# custom
+generate_iso
