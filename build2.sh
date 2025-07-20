@@ -3,7 +3,7 @@
 # Set variables
 CHROOT_DIR="kaynak"
 ISO_WORK_DIR="isowork"
-VERSION="66"
+VERSION="69-backports-nvidia"
 ISO_OUTPUT="bismih-$VERSION-amd64.iso"
 
 p_system() {
@@ -117,6 +117,40 @@ install_firmware() {
         firmware-misc-nonfree firmware-myricom firmware-netxen firmware-qlogic firmware-realtek firmware-samsung \
         firmware-siano firmware-ti-connectivity firmware-zd1211 firmware-sof-signed zd1211-firmware -y
     p_system update-initramfs -u
+}
+
+install_nvidia_drivers() {
+    echo "NVIDIA sürücüleri yükleniyor..."
+    
+    # NVIDIA deposunu ekleme
+    wget -c https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb -O "${CHROOT_DIR}/tmp/cuda-keyring.deb"
+    p_system_n_a dpkg -i /tmp/cuda-keyring.deb
+    update_system
+
+    # Noveau sürücüsünü kaldırmak için
+    p_system_n_a apt purge nvidia-* -y
+    p_system_n_a apt purge xserver-xorg-video-nouveau -y
+
+    # NVIDIA sürücülerini yükle
+    p_system_n_a apt install nvidia-driver nvidia-settings nvidia-kernel-dkms -y
+    
+    # CUDA desteği
+    # p_system_n_a apt install nvidia-cuda-toolkit -y
+    
+    # Vulkan desteği
+    p_system_n_a apt install nvidia-vulkan-icd vulkan-tools -y
+    
+    # NVIDIA ayarları için gerekli
+    p_system_n_a apt install mesa-utils -y
+
+        cat >> "${CHROOT_DIR}/etc/modprobe.d/blacklist-nvidia.conf" << EOF
+# Disable Nouveau driver
+blacklist nouveau
+options nouveau modeset=0
+EOF
+    
+    # initramfs'i güncelle
+    p_system update-initramfs -u -k all
 }
 
 install_pipewire(){
@@ -234,6 +268,31 @@ set_configs(){
     config_shell
 }
 
+fix_hardware_compatibility() {
+    echo "Donanım uyumluluğu iyileştirmeleri yapılıyor..."
+    
+    local grub_file="${CHROOT_DIR}/etc/default/grub"
+    local current_cmdline=$(grep "GRUB_CMDLINE_LINUX_DEFAULT=" "$grub_file" | cut -d '"' -f2)
+    
+    # NVIDIA için özel parametreler
+    local nvidia_params="nvidia-drm.modeset=1 nouveau.modeset=0"
+    local acpi_params="acpi=force acpi_osi=Linux"
+    local usb_params="usbcore.autosuspend=-1"
+    
+    local new_cmdline="$current_cmdline $nvidia_params $acpi_params $usb_params"
+    
+    sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\".*\"/GRUB_CMDLINE_LINUX_DEFAULT=\"$new_cmdline\"/" "$grub_file"
+    
+    # Nouveau'yu blacklist'e ekle
+    cat >> "${CHROOT_DIR}/etc/modprobe.d/blacklist-nvidia.conf" << EOF
+# Nouveau sürücüsünü devre dışı bırak
+blacklist nouveau
+options nouveau modeset=0
+EOF
+
+    echo "Donanım uyumluluğu iyileştirmeleri tamamlandı."
+}
+
 fix_bluetooth() {
     echo "Bluetooth askıya alma sorunu düzeltiliyor..."
     
@@ -267,6 +326,7 @@ clean_system() {
 
 generate_iso() {
     echo "iso oluşturuluyor..."
+    clean_system
     
     # Chroot mount'ları temizle
     for i in sys proc dev/pts dev; do
@@ -292,6 +352,7 @@ generate_iso() {
         return 1
     fi
 
+    # Gerekli dizinleri oluştur
     mkdir -p "${ISO_WORK_DIR}/live"
     mkdir -p "${ISO_WORK_DIR}/boot"
 
@@ -309,6 +370,7 @@ generate_iso() {
     # GRUB yapılandırması
     if [ ! -d "grub" ]; then
         git clone https://github.com/bismih-org/grub.git
+        rm -rf grub/.git
     fi
     cp -r grub/ "${ISO_WORK_DIR}/boot/"
 
@@ -317,6 +379,7 @@ generate_iso() {
     
     echo "ISO başarıyla oluşturuldu: ${ISO_OUTPUT}"
 }
+
 main() {
     setup_chroot
     add_repositories
@@ -325,6 +388,7 @@ main() {
     set_system_locale
     install_grub
     install_firmware
+    install_nvidia_drivers
     install_pipewire
     install_desktop_environment "kde"
     bip_sound_problem
@@ -332,31 +396,18 @@ main() {
     install_other_packages
     install_flatpack_and_packages
     set_configs
+    fix_hardware_compatibility
     fix_bluetooth
-    clean_system
     generate_iso
 }
 
 custom(){
-    setup_chroot
-    add_repositories
-    update_system
-    install_kernel "stable"
-    set_system_locale
-    install_grub
-    install_firmware
-    install_pipewire
-    install_desktop_environment "kde"
-    bip_sound_problem
-    intall_pardus_packages
-    install_other_packages
-    install_flatpack_and_packages
-    set_configs
-    fix_bluetooth
-    clean_system
-    # generate_iso
+    enter_system
+    install_nvidia_drivers
+    fix_hardware_compatibility
+    generate_iso
 }
 
 # main
-# custom
-generate_iso
+custom
+# generate_iso
