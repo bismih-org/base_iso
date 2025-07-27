@@ -408,6 +408,6 @@ custom(){
     generate_iso
 }
 
-# main
-custom
+main
+# custom
 # generate_iso
